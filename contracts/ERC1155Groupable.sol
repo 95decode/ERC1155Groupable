@@ -1,64 +1,123 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.4;
+pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 
 /**
- * @dev Extension of {ERC1155} that makes token groups with groupId and groupSubId
+ * @dev Extension of {ERC1155} that makes token groups with `groupId`
  */
 abstract contract ERC1155Groupable is ERC1155 {
     // Optional mapping for group URIs
     mapping(uint256 => string) private _groupURIs;
 
-    mapping(uint256 => mapping(uint256 => uint256)) private _groupIds;
+    // Mapping from group ID to total supply
+    mapping(uint256 => uint256) private _groupTotalSupply;
 
-    function _setGroupURI(uint256 groupId, string memory groupURI) internal virtual {
-        _groupURIs[groupId] = groupURI;
-    }
+    // Mapping from token ID to unallocated supply
+    mapping(uint256 => uint256) private _unAllocSupply;
 
-    function _setGroup(uint256 tokenId, uint256 groupId, uint256 groupSubId) internal virtual {
-        _groupIds[groupId][groupSubId] = tokenId;
-    }
+    // Mapping from group ID to original token ID
+    mapping(uint256 => uint256) private _groupIds;
 
-    function findGroupURI(uint256 groupId) public view virtual returns (string memory) {
+    /**
+     * @dev Group URI in with given `groupId`
+     */
+    function groupURI(uint256 groupId) public view virtual returns (string memory) {
         return _groupURIs[groupId];
     }
 
-    function findIdWithGroup(uint256 groupId, uint256 groupSubId) public view virtual returns (uint256) {
-        return _groupIds[groupId][groupSubId];
+    /**
+     * @dev Group Id in with given `tokenId`
+     */
+    function groupID(uint256 tokenId) public view virtual returns (uint256) {
+        return _groupIds[tokenId];
     }
 
-    function mintWithGroup(
-        address to,
-        uint256 id,
-        uint256 amount,
-        bytes memory data,
-        uint256 groupId, 
-        uint256 groupSubId 
-    ) public virtual {
-        _mint(to, id, amount, data);
-        _setGroup(id, groupId, groupSubId);
+    /**
+     * @dev Total amount of tokens in with a given `groupId`.
+     */
+    function groupTotalSupply(uint256 groupId) public view virtual returns (uint256) {
+        return _groupTotalSupply[groupId];
     }
 
-    function transferWithGroup(
+    /**
+     * @dev Indicates whether any token exist with a given `groupId`, or not.
+     */
+    function groupExists(uint256 groupId) public view virtual returns (bool) {
+        return ERC1155Groupable.groupTotalSupply(groupId) > 0;
+    }
+
+    /**
+     * @dev See {ERC1155-balanceOf}.
+     *
+     * Requirements:
+     *
+     * - `account` cannot be the zero address.
+     *//*
+    function groupBalanceOf(address account, uint256 groupId, uint256 groupSubId) public view virtual returns (uint256) {
+        return super.balanceOf(account, tokenIdFromGroupId(groupId, groupSubId));
+    }
+    */
+
+    /**
+     * @dev Set group URI
+     */
+    function _setGroupURI(uint256 groupId, string memory uri) internal virtual {
+        _groupURIs[groupId] = uri;
+    }
+
+    /**
+     * @dev Map `groupId` from `tokenId`
+     * 
+     * Requirements:
+     * 
+     * - the token id must not be grouped
+     * - the group id must not be zero
+     */
+    function _setGroup(uint256 tokenId, uint256 groupId) internal virtual {
+        require(groupId != 0, "ERC1155Groupable: group Id must not be zero");
+        require(_groupIds[tokenId] == 0, "ERC1155Groupable: token Id is aleady grouped");
+        
+        if(_unAllocSupply[tokenId] > 0) {
+            _groupTotalSupply[groupId] += _unAllocSupply[tokenId];
+            _unAllocSupply[tokenId] = 0;
+        }
+
+        _groupIds[tokenId] = groupId;
+    }
+
+    /**
+     * @dev See {ERC1155-_beforeTokenTransfer}.
+     */
+    function _beforeTokenTransfer(
+        address operator,
         address from,
         address to,
-        uint256 groupId,
-        uint256 groupSubId,
-        uint256 amount,
+        uint256[] memory ids,
+        uint256[] memory amounts,
         bytes memory data
-    ) public virtual {
-        safeTransferFrom(
-            from,
-            to,
-            findIdWithGroup(groupId, groupSubId),
-            amount,
-            data
-        );
+    ) internal virtual override {
+        super._beforeTokenTransfer(operator, from, to, ids, amounts, data);
+
+        if (from == address(0)) {
+            for (uint256 i = 0; i < ids.length; ++i) {
+                _groupIds[ids[i]] != 0 ? _groupTotalSupply[_groupIds[ids[i]]] += amounts[i] : _unAllocSupply[ids[i]] += amounts[i];
+            }
+        }
+
+        if (to == address(0)) {
+            for (uint256 i = 0; i < ids.length; ++i) {
+                uint256 id = ids[i];
+                uint256 amount = amounts[i];
+                uint256 supply = _groupTotalSupply[_groupIds[id]];
+                require(supply >= amount, "ERC1155: burn amount exceeds totalSupply");
+                if(_groupIds[id] != 0) {
+                    unchecked {
+                        _groupTotalSupply[_groupIds[id]] = supply - amount;
+                    }
+                }
+            }
+        }
     }
-
-    // balanceOfWithGroup()
-
-    // 
 }

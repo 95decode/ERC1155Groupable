@@ -1,13 +1,14 @@
-# Sample Hardhat Project
+# ERC1155Groupable
+ERC1155Groupable and preset contract and a test script for that contract
 
-This project demonstrates a basic Hardhat use case. It comes with a sample contract, a test for that contract, and a script that deploys that contract.
+## Installation
+ERC1155Groupable recommends [Node.js](https://nodejs.org/) v16.0.0+ to run.
 
-Try running some of the following tasks:
+Install the dependencies and test the contract.
 
-```shell
-npx hardhat help
-npx hardhat test
-REPORT_GAS=true npx hardhat test
-npx hardhat node
-npx hardhat run scripts/deploy.ts
+```sh
+cd ERC1155Groupable
+npm install
+npx hardhat compile
+npx hardhat coverage
 ```

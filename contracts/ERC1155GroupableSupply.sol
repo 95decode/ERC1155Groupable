@@ -3,11 +3,12 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
+import "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Supply.sol";
 
 /**
  * @dev Extension of {ERC1155} that makes token groups with `groupId`
  */
-abstract contract ERC1155Groupable is ERC1155 {
+abstract contract ERC1155GroupableSupply is ERC1155, ERC1155Supply {
     // Optional mapping for group URIs
     mapping(uint256 => string) private _groupURIs;
 
@@ -45,7 +46,7 @@ abstract contract ERC1155Groupable is ERC1155 {
      * @dev Indicates whether any token exist with a given `groupId`, or not.
      */
     function groupExists(uint256 groupId) public view virtual returns (bool) {
-        return ERC1155Groupable.groupTotalSupply(groupId) > 0;
+        return ERC1155GroupableSupply.groupTotalSupply(groupId) > 0;
     }
 
     /**
@@ -88,6 +89,20 @@ abstract contract ERC1155Groupable is ERC1155 {
     }
 
     /**
+     * @dev Change group with a given `tokenId` and `groupId`.
+     */
+    function _changeGroup(uint256 tokenId, uint256 groupId) internal virtual {
+        require(groupId != 0, "ERC1155Groupable: group Id must not be zero");
+        require(_groupIds[tokenId] != 0, "ERC1155Groupable: token Id is not grouped");
+
+        uint256 supply = totalSupply(tokenId);
+        _groupTotalSupply[_groupIds[tokenId]] -= supply;
+        _groupTotalSupply[groupId] += supply;
+
+        _groupIds[tokenId] = groupId;
+    }
+
+    /**
      * @dev See {ERC1155-_beforeTokenTransfer}.
      */
     function _beforeTokenTransfer(
@@ -97,9 +112,7 @@ abstract contract ERC1155Groupable is ERC1155 {
         uint256[] memory ids,
         uint256[] memory amounts,
         bytes memory data
-    ) internal virtual override {
-        super._beforeTokenTransfer(operator, from, to, ids, amounts, data);
-
+    ) internal virtual override(ERC1155, ERC1155Supply) {
         if (from == address(0)) {
             for (uint256 i = 0; i < ids.length; ++i) {
                 _groupIds[ids[i]] != 0 ? _groupTotalSupply[_groupIds[ids[i]]] += amounts[i] : _unAllocSupply[ids[i]] += amounts[i];
@@ -110,14 +123,22 @@ abstract contract ERC1155Groupable is ERC1155 {
             for (uint256 i = 0; i < ids.length; ++i) {
                 uint256 id = ids[i];
                 uint256 amount = amounts[i];
-                uint256 supply = _groupTotalSupply[_groupIds[id]];
-                require(supply >= amount, "ERC1155: burn amount exceeds totalSupply");
                 if(_groupIds[id] != 0) {
+                    uint256 supply = _groupTotalSupply[_groupIds[id]];
+                    require(supply >= amount, "ERC1155: burn amount exceeds groupTotalSupply");
                     unchecked {
                         _groupTotalSupply[_groupIds[id]] = supply - amount;
+                    }
+                } else {
+                    uint256 supply = totalSupply(id);
+                    require(supply >= amount, "ERC1155: burn amount exceeds totalSupply");
+                    unchecked {
+                        _unAllocSupply[id] = supply - amount;
                     }
                 }
             }
         }
+
+        super._beforeTokenTransfer(operator, from, to, ids, amounts, data);
     }
 }

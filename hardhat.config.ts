@@ -1,6 +1,7 @@
 import { HardhatUserConfig, task } from "hardhat/config";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import "@nomicfoundation/hardhat-toolbox";
+import 'solidity-coverage';
 
 task(
   "accounts",
